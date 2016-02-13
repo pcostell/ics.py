@@ -6,6 +6,7 @@ from six import PY2, PY3
 from six.moves import filter, map, range
 
 import collections
+import pyparsing as pp
 
 CRLF = '\r\n'
 
@@ -65,21 +66,35 @@ class ContentLine:
             raise ParseError("No ':' in line '{}'".format(line))
 
         # Separate key and value
-        splitted = line.split(':', 1)
-        key, value = splitted[0], splitted[1].strip()
-
-        # Separate name and params
-        splitted = key.split(';')
-        name, params_strings = splitted[0], splitted[1:]
-
-        # Separate key and values for params
-        params = {}
-        for paramstr in params_strings:
-            if '=' not in paramstr:
-                raise ParseError("No '=' in line '{}'".format(line))
-            pname, pvals = paramstr.split('=', 1)
-            params[pname] = pvals.split(',')
-        return cls(name, params, value)
+        wordBNF = pp.Word(pp.printables,
+                          excludeChars='=;:')
+        nameBNF = wordBNF
+        paramBNF = (wordBNF +
+                    pp.Suppress(pp.Literal('=')) +
+                    pp.delimitedList(pp.Or([pp.quotedString, wordBNF]),
+                                     delim=',',
+                                     combine=True))
+        paramsBNF = pp.ZeroOrMore(
+            pp.Suppress(pp.Literal(';')) +
+            paramBNF)
+        valueBNF = pp.restOfLine
+        lineBNF = (pp.Optional(nameBNF) +
+                   paramsBNF +
+                   pp.Suppress(pp.Literal(':')) +
+                   valueBNF)
+        try:
+            split_line = lineBNF.parseString(line, parseAll=True)
+            if len(split_line) == 1:
+                return cls('', {}, split_line[0])
+            name = split_line[0]
+            params = dict([(param_name, param_value.split(','))
+                           for (param_name, param_value) in
+                           zip(split_line[1:-1:2],
+                               split_line[2:-1:2])])
+            value = split_line[-1]
+            return cls(name, params, value)
+        except pp.ParseException:
+            raise ParseError("Unable to parse %s" % line)
 
     def clone(self):
         # dict(self.params) -> Make a copy of the dict

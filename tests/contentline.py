@@ -22,6 +22,13 @@ class TestContentLine(unittest.TestCase):
             {},
             'dfqsdfjqkshflqsjdfhqs fqsfhlqs dfkqsldfkqsdfqsfqsfqsfs'
         ),
+        'ATTENDEE;CUTYPE=INDIVIDUAL;X-RESPONSE-COMMENT="asdf asdf asdfq":value':
+        ContentLine(
+            'ATTENDEE',
+            {'CUTYPE': ['INDIVIDUAL'],
+             'X-RESPONSE-COMMENT': ['"asdf asdf asdfq"']},
+            'value'
+        ),
         'DTSTART;TZID=Europe/Brussels:20131029T103000':
         ContentLine(
             'DTSTART',
