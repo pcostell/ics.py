@@ -59,6 +59,7 @@ setup(
         "python-dateutil",
         "arrow==0.4.2",
         "six>1.5",
+        "pyparsing",
     ],
     license=__license__,
     packages=['ics'],
