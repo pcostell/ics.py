@@ -25,23 +25,22 @@ class ContentLine:
     """
 
     def __eq__(self, other):
-        ret = (self.name == other.name and
-               self.params == other.params and
-               self.value == other.value)
-        return ret
+        return (self.name == other.name and
+                self.params == dict(other.params) and
+                self.value == other.value)
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def __init__(self, name, params={}, value=''):
+    def __init__(self, name, params=None, value=''):
         self.name = name.upper()
-        self.params = params
+        self.params = params or collections.OrderedDict()
         self.value = value
 
     def __str__(self):
         params_str = ''
-        for pname in self.params:
-            params_str += ';{}={}'.format(pname, ','.join(self.params[pname]))
+        for pname, pvalue in self.params.items():
+            params_str += ';{}={}'.format(pname, ','.join(pvalue))
         ret = "{}{}:{}".format(self.name, params_str, self.value)
         return ret.encode('utf-8') if PY2 else ret
 
@@ -66,39 +65,48 @@ class ContentLine:
             raise ParseError("No ':' in line '{}'".format(line))
 
         # Separate key and value
-        wordBNF = pp.Word(pp.printables,
-                          excludeChars='=;:')
+        wordBNF = pp.Word(pp.printables + ' \n\t\r',
+                          excludeChars='=;:,"')
         nameBNF = wordBNF
-        paramBNF = (wordBNF +
-                    pp.Suppress(pp.Literal('=')) +
-                    pp.delimitedList(pp.Or([pp.quotedString, wordBNF]),
-                                     delim=',',
-                                     combine=True))
-        paramsBNF = pp.ZeroOrMore(
+        multilineQuoteBNF = pp.QuotedString('"', multiline=True,
+                                           escChar='\\',
+                                           unquoteResults=False)
+        paramValueBNF = pp.Or([multilineQuoteBNF,
+                               wordBNF])
+        paramBNF = pp.Group(wordBNF +
+            pp.Suppress(pp.Literal('=')) +
+            pp.delimitedList(paramValueBNF,
+                             delim=','))
+        paramsBNF = pp.Group(pp.ZeroOrMore(
             pp.Suppress(pp.Literal(';')) +
-            paramBNF)
-        valueBNF = pp.restOfLine
-        lineBNF = (pp.Optional(nameBNF) +
-                   paramsBNF +
+            paramBNF))
+        valueBNF = pp.SkipTo(pp.StringEnd(), include=True)
+        lineBNF = (pp.Optional(nameBNF +
+                               paramsBNF) +
                    pp.Suppress(pp.Literal(':')) +
                    valueBNF)
         try:
             split_line = lineBNF.parseString(line, parseAll=True)
+            name = ''
+            params = []
+            value = ''
             if len(split_line) == 1:
-                return cls('', {}, split_line[0])
-            name = split_line[0]
-            params = dict([(param_name, param_value.split(','))
-                           for (param_name, param_value) in
-                           zip(split_line[1:-1:2],
-                               split_line[2:-1:2])])
-            value = split_line[-1]
-            return cls(name, params, value)
+                value, = split_line
+            elif len(split_line) == 2:
+                name, value = split_line
+            else:
+                name, params, value = split_line
+                params = [(t[0], t[1:]) for t in params]
+                params = collections.OrderedDict(params)
+            return cls(name, params, value.rstrip(' \n\t\r'))
         except pp.ParseException:
             raise ParseError("Unable to parse %s" % line)
 
     def clone(self):
         # dict(self.params) -> Make a copy of the dict
-        return self.__class__(self.name, dict(self.params), self.value)
+        return self.__class__(self.name,
+                              collections.OrderedDict(self.params),
+                              self.value)
 
 
 class Container(list):

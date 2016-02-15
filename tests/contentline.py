@@ -1,4 +1,6 @@
+import itertools
 import unittest
+from collections import OrderedDict
 from ics.parse import ParseError, ContentLine
 
 
@@ -22,11 +24,18 @@ class TestContentLine(unittest.TestCase):
             {},
             'dfqsdfjqkshflqsjdfhqs fqsfhlqs dfkqsldfkqsdfqsfqsfqsfs'
         ),
-        'ATTENDEE;CUTYPE=INDIVIDUAL;X-RESPONSE-COMMENT="asdf asdf asdfq":value':
+        'ATTENDEE;CUTYPE=INDIVIDUAL;X-RESPONSE-COMMENT="asd asd\n asd":value':
         ContentLine(
             'ATTENDEE',
-            {'CUTYPE': ['INDIVIDUAL'],
-             'X-RESPONSE-COMMENT': ['"asdf asdf asdfq"']},
+            OrderedDict([('CUTYPE', ['INDIVIDUAL']),
+                         ('X-RESPONSE-COMMENT', ['"asd asd\n asd"'])]),
+            'value'
+        ),
+        'ATTENDEE;CUTYPE=INDIVIDUAL;NAME=O\'Shanassey:value':
+        ContentLine(
+            'ATTENDEE',
+            OrderedDict([('CUTYPE', ['INDIVIDUAL']),
+                         ('NAME', ['O\'Shanassey'])]),
             'value'
         ),
         'DTSTART;TZID=Europe/Brussels:20131029T103000':
@@ -37,17 +46,21 @@ class TestContentLine(unittest.TestCase):
         ),
     }
 
-    dataset2 = {
+    # Items in parse_dataset can be parsed but are not reversible.
+    parse_dataset = {
+        'BEGIN:VCALENDAR\n' :
+        ContentLine('BEGIN', {}, 'VCALENDAR'),
         'haha;p2=v2;p1=v1:':
         ContentLine(
             'haha',
-            {'p1': ['v1'], 'p2': ['v2']},
+            OrderedDict([('p1', ['v1']), ('p2', ['v2'])]),
             ''
         ),
         'haha;hihi=p3,p4,p5;hoho=p1,p2:blabla:blublu':
         ContentLine(
             'haha',
-            {'hoho': ['p1', 'p2'], 'hihi': ['p3', 'p4', 'p5']},
+            OrderedDict([('hihi', ['p3', 'p4', 'p5']),
+                         ('hoho', ['p1', 'p2'])]),
             'blabla:blublu'
         ),
     }
@@ -57,14 +70,12 @@ class TestContentLine(unittest.TestCase):
         self.assertRaises(ParseError, ContentLine.parse, 'haha;p1:')
 
     def test_str(self):
-        for test in self.dataset:
-            expected = test
-            got = str(self.dataset[test])
-            self.assertEqual(expected, got)
+        for expected, actual in self.dataset.items():
+            self.assertEqual(expected, str(actual))
 
     def test_parse(self):
-        self.dataset2.update(self.dataset)
-        for test in self.dataset2:
-            expected = self.dataset2[test]
+        for test, expected in itertools.chain(self.dataset.items(),
+                                              self.parse_dataset.items()):
             got = ContentLine.parse(test)
             self.assertEqual(expected, got)
+
